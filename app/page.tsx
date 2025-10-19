@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, Dispatch, SetStateAction } from 'react';
+import React, { useState, useEffect, useCallback, Dispatch, SetStateAction, useMemo } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, Timestamp } from 'firebase/firestore';
 import { 
@@ -96,7 +96,7 @@ async function loadAllGames(): Promise<Game[]> {
     
     const games: Game[] = [];
     snapshot.forEach((docSnap) => {
-      const gameData = docSnap.data() as Game;
+      const gameData = docSnap.data() as Omit<Game, 'id'>;
       console.log('✅ Spiel geladen:', gameData.title);
       games.push({
         ...gameData,
@@ -167,11 +167,12 @@ async function savePlayerScore(playerScore: Omit<PlayerScore, 'id' | 'timestamp'
 async function getPlayerScores(playerName: string): Promise<PlayerScore[]> {
   try {
     const scoresRef = collection(db, 'playerScores');
-    const snapshot = await getDocs(scoresRef);
+    const q = query(collection(db, "playerScores"));
+    const snapshot = await getDocs(q);
     
     const scores: PlayerScore[] = [];
     snapshot.forEach((docSnap) => {
-      const data = docSnap.data() as PlayerScore;
+      const data = docSnap.data() as Omit<PlayerScore, 'id'>;
       if (data.playerName === playerName) {
         scores.push({
           ...data,
@@ -195,7 +196,7 @@ async function getAllPlayerScores(): Promise<PlayerScore[]> {
     const scores: PlayerScore[] = [];
     snapshot.forEach((docSnap) => {
       scores.push({
-        ...docSnap.data() as PlayerScore,
+        ...(docSnap.data() as Omit<PlayerScore, 'id'>),
         id: docSnap.id
       });
     });
@@ -299,17 +300,17 @@ function PlayerNameInput({ setPlayerName }: { setPlayerName: Dispatch<SetStateAc
   const [showExistingNameInput, setShowExistingNameInput] = useState(false);
   const [existingName, setExistingName] = useState('');
 
-  const adjectives = [
+  const adjectives = useMemo(() => [
     'Schnelle', 'Kluge', 'Mutige', 'Lustige', 'Starke', 'Kreative', 'Coole', 
     'Wilde', 'Clevere', 'Geniale', 'Magische', 'Legendäre', 'Epische', 'Ninja',
     'Mystische', 'Goldene', 'Silberne', 'Fliegende', 'Tanzende', 'Singende'
-  ];
+  ], []);
 
-  const nouns = [
+  const nouns = useMemo(() => [
     'Fuchs', 'Adler', 'Tiger', 'Panda', 'Delfin', 'Löwe', 'Wolf', 'Bär',
     'Drache', 'Phönix', 'Einhorn', 'Falke', 'Gepard', 'Hai', 'Panther',
     'Affe', 'Eule', 'Rabe', 'Salamander', 'Kobra'
-  ];
+  ], []);
 
   const generateRandomName = useCallback(() => {
     const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
@@ -949,7 +950,7 @@ function CreateView({ setView, playerName }: CreateViewProps) {
 
       const { questions } = await response.json();
 
-      const newGame: Game = {
+      const newGame: Omit<Game, 'id' | 'createdAt' | 'ratings'> = {
         title,
         topic,
         difficulty,
@@ -959,7 +960,7 @@ function CreateView({ setView, playerName }: CreateViewProps) {
         questions
       };
 
-      await saveGame(newGame);
+      await saveGame(newGame as Game);
       alert('Spiel erfolgreich erstellt! ✅');
       setView('archive');
     } catch (err: unknown) {
