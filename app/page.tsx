@@ -32,7 +32,6 @@ const db = getFirestore(app);
 
 const LEVELS = [10, 100, 1000, 10000, 100000, 1000000];
 
-// Type definition for the different views in the app
 type View = 'archive' | 'game' | 'create' | 'dashboard';
 
 interface Question {
