@@ -222,63 +222,65 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-pink-900">
-      <nav className="bg-black bg-opacity-50 p-4 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-yellow-400">💰 Millionenspiel</h1>
-          {playerName && (
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => setView('archive')}
-                className={`px-4 py-2 rounded-lg transition ${
-                  view === 'archive' 
-                    ? 'bg-white text-purple-900 font-bold' 
-                    : 'bg-purple-600 hover:bg-purple-700 text-white'
-                }`}
-              >
-                📚 Spiele
-              </button>
-              <button
-                onClick={() => setView('create')}
-                className={`px-4 py-2 rounded-lg transition ${
-                  view === 'create' 
-                    ? 'bg-white text-green-900 font-bold' 
-                    : 'bg-green-600 hover:bg-green-700 text-white'
-                }`}
-              >
-                ➕ Erstellen
-              </button>
-              <button
-                onClick={() => setView('dashboard')}
-                className={`px-4 py-2 rounded-lg transition ${
-                  view === 'dashboard' 
-                    ? 'bg-white text-orange-900 font-bold' 
-                    : 'bg-orange-600 hover:bg-orange-700 text-white'
-                }`}
-              >
-                📊 Dashboard
-              </button>
-              <span className="px-4 py-2 bg-white text-purple-900 rounded-lg font-bold">
-                👤 {playerName}
-              </span>
-              <button
-                onClick={() => {
-                  if (confirm('Möchtest du dich abmelden und einen neuen Namen wählen?')) {
-                    localStorage.removeItem('millionenspiel_playerName');
-                    setPlayerName('');
-                    setView('archive');
-                  }
-                }}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
-                title="Abmelden"
-              >
-                🚪
-              </button>
-            </div>
-          )}
+      <nav className="bg-black bg-opacity-50 p-3 sm:p-4 backdrop-blur-sm">
+  <div className="max-w-7xl mx-auto">
+    <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
+      <h1 className="text-2xl sm:text-3xl font-bold text-yellow-400">💰 Millionenspiel</h1>
+      {playerName && (
+        <div className="flex flex-wrap items-center justify-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => setView('archive')}
+            className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg transition text-xs sm:text-base ${
+              view === 'archive' 
+                ? 'bg-white text-purple-900 font-bold' 
+                : 'bg-purple-600 hover:bg-purple-700 text-white'
+            }`}
+          >
+            📚 Spiele
+          </button>
+          <button
+            onClick={() => setView('create')}
+            className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg transition text-xs sm:text-base ${
+              view === 'create' 
+                ? 'bg-white text-green-900 font-bold' 
+                : 'bg-green-600 hover:bg-green-700 text-white'
+            }`}
+          >
+            ➕ Erstellen
+          </button>
+          <button
+            onClick={() => setView('dashboard')}
+            className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg transition text-xs sm:text-base ${
+              view === 'dashboard' 
+                ? 'bg-white text-orange-900 font-bold' 
+                : 'bg-orange-600 hover:bg-orange-700 text-white'
+            }`}
+          >
+            📊 Dashboard
+          </button>
+          <span className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-white text-purple-900 rounded-lg font-bold text-xs sm:text-base truncate max-w-[100px] sm:max-w-none">
+            👤 {playerName}
+          </span>
+          <button
+            onClick={() => {
+              if (confirm('Möchtest du dich abmelden und einen neuen Namen wählen?')) {
+                localStorage.removeItem('millionenspiel_playerName');
+                setPlayerName('');
+                setView('archive');
+              }
+            }}
+            className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition text-xs sm:text-base"
+            title="Abmelden"
+          >
+            🚪
+          </button>
         </div>
-      </nav>
+      )}
+    </div>
+  </div>
+</nav>
 
-      <div className="max-w-7xl mx-auto p-8">
+      <div className="max-w-7xl mx-auto p-4 sm:p-8">
         {!playerName ? (
           <PlayerNameInput setPlayerName={setPlayerName} />
         ) : (
@@ -517,11 +519,12 @@ function ArchiveView({ setCurrentGame, setView, playerName }: any) {
 
   return (
     <div className="text-gray-900 dark:text-white">
-      <h2 className="text-4xl font-bold mb-2 text-center">
-        <span className="inline-flex items-center gap-3 text-yellow-400">
-          📚 <span className="text-white">Spiele-Archiv</span>
-        </span>
-      </h2>
+      <h2 className="text-2xl sm:text-4xl font-bold mb-2 text-center">
+  <span className="inline-flex items-center gap-3 text-yellow-400">
+    📚 <span className="text-white">Spiele-Archiv</span>
+  </span>
+</h2>
+<p className="text-center mb-6 sm:mb-8 text-sm sm:text-base text-gray-700 dark:text-gray-300"></p>
       <p className="text-center mb-8 text-gray-700 dark:text-gray-300">
         Willkommen {playerName}!{' '}
         {games.length === 0 ? (
@@ -1146,7 +1149,7 @@ function CreateView({ setView, playerName }: any) {
 
   return (
     <div className="text-gray-900 dark:text-white max-w-4xl mx-auto">
-      <h2 className="text-4xl font-bold mb-8 text-center text-yellow-400">✨ Neues Spiel erstellen</h2>
+      <h2 className="text-2xl sm:text-4xl font-bold mb-6 sm:mb-8 text-center text-yellow-400">✨ Neues Spiel erstellen</h2>
 
       {error && (
         <div className="mb-6 p-4 bg-red-100 text-red-800 border border-red-300 rounded-lg dark:bg-red-500/20 dark:text-red-200 dark:border-red-500/40">
@@ -1434,7 +1437,7 @@ function DashboardView({ playerName }: { playerName: string }) {
 
   return (
     <div className="text-white">
-      <h2 className="text-4xl font-bold mb-8 text-center text-yellow-400">📊 Dashboard – {playerName}</h2>
+      <h2 className="text-2xl sm:text-4xl font-bold mb-6 sm:mb-8 text-center text-yellow-400">📊 Dashboard – {playerName}</h2>
 
       {/* --- Filterleiste --- */}
       <div className="mb-8 bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-6 border border-white border-opacity-20">
