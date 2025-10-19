@@ -763,56 +763,78 @@ function GameView({ game, setView, playerName }: { game: Game; setView: any; pla
     }
   };
 
-  if (gameOver) {
-    return (
-      <div className="text-center text-white">
-        <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-12 max-w-2xl mx-auto border border-white border-opacity-20">
-          <h2 className="text-4xl font-bold mb-6 text-yellow-400">
-            {won ? '🎉 Gratuliere!' : '😢 Schade!'}
-          </h2>
-          <p className="text-6xl font-bold mb-6">{earnedMoney.toLocaleString()} CHF</p>
-          <p className="text-xl mb-4">
-            {won 
-              ? `Fantastisch ${playerName}! Du hast die Million gewonnen! 🏆` 
-              : `Leider verloren, ${playerName}! Du hast Level ${currentLevel + 1} erreicht.`}
-          </p>
+ if (gameOver) {
+  return (
+    <div className="text-center text-white">
+      <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-12 max-w-2xl mx-auto border border-white border-opacity-20">
+        <h2 className="text-4xl font-bold mb-6 text-yellow-400">
+          {won ? '🎉 Gratuliere!' : '😢 Schade!'}
+        </h2>
+        <p className="text-6xl font-bold mb-6">{earnedMoney.toLocaleString()} CHF</p>
+        <p className="text-xl mb-8">
+          {won 
+            ? `Fantastisch ${playerName}! Du hast die Million gewonnen! 🏆` 
+            : `Leider verloren, ${playerName}! Du hast Level ${currentLevel + 1} erreicht.`}
+        </p>
 
-          {showRating && (
-            <div className="mb-8 p-6 bg-blue-900 bg-opacity-30 rounded-lg">
-              <h3 className="text-2xl font-bold mb-4">⭐ Bewerte dieses Spiel</h3>
-              <div className="flex justify-center space-x-2 mb-4">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    onClick={() => setUserRating(star)}
-                    className={`text-5xl transition transform hover:scale-110 ${
-                      star <= userRating ? 'text-yellow-400' : 'text-gray-500'
-                    }`}
-                  >
-                    ⭐
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={handleRatingSubmit}
-                disabled={userRating === 0}
-                className="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-bold rounded-lg transition"
-              >
-                Bewertung absenden
-              </button>
+        {showRating && (
+          <div className="mb-8 p-6 bg-blue-900 bg-opacity-30 rounded-lg">
+            <h3 className="text-2xl font-bold mb-4">⭐ Bewerte dieses Spiel</h3>
+            <div className="flex justify-center space-x-2 mb-4">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onClick={() => setUserRating(star)}
+                  className={`text-5xl transition transform hover:scale-110 ${
+                    star <= userRating ? 'text-yellow-400' : 'text-gray-500'
+                  }`}
+                >
+                  ⭐
+                </button>
+              ))}
             </div>
-          )}
+            <button
+              onClick={handleRatingSubmit}
+              disabled={userRating === 0}
+              className="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-bold rounded-lg transition"
+            >
+              Bewertung absenden
+            </button>
+          </div>
+        )}
 
+        <div className="flex flex-col gap-4">
+          {!won && (
+            <button
+              onClick={() => {
+                // Reset game state
+                setCurrentLevel(0);
+                setEarnedMoney(0);
+                setJokerUsed(false);
+                setShowHint(false);
+                setGameOver(false);
+                setWon(false);
+                setSelectedAnswer(null);
+                setShowRating(false);
+                setUserRating(0);
+              }}
+              className="px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white text-xl font-bold rounded-xl transition transform hover:scale-105"
+            >
+              🔄 Nochmal spielen
+            </button>
+          )}
+          
           <button
             onClick={() => setView('archive')}
             className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-xl font-bold rounded-xl transition transform hover:scale-105"
           >
-            Zurück zur Spieleübersicht
+            📚 Zurück zur Spieleübersicht
           </button>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   if (!currentQuestion || shuffledAnswers.length === 0) {
     return <div className="text-white text-center">Lade Frage...</div>;
