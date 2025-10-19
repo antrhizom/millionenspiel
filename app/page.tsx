@@ -647,7 +647,7 @@ function ArchiveView({ setCurrentGame, setView, playerName }: any) {
   );
 }
 
-function GameView({ game, setView, playerName }: { game: Game; setView: any; playerName: string }) {
+function GameView({ game, setView, playerName }: GameViewProps) {
   const [currentLevel, setCurrentLevel] = useState(0);
   const [earnedMoney, setEarnedMoney] = useState(0);
   const [jokerUsed, setJokerUsed] = useState(false);
@@ -662,28 +662,56 @@ function GameView({ game, setView, playerName }: { game: Game; setView: any; pla
   const [userRating, setUserRating] = useState(0);
 
   useEffect(() => {
-    selectRandomQuestion();
-  }, [currentLevel, game]);
-
-  const selectRandomQuestion = () => {
-    console.log('🎯 Wähle Frage für Level:', currentLevel + 1);
-    console.log('📋 Alle Fragen:', game.questions.length);
-    
-    // Filter nach Level - falls level property existiert
-    let levelQuestions = game.questions.filter(q => q.level === currentLevel + 1);
-    
-    // Fallback: Wenn keine level property, nehme Fragen nach Index (alte Struktur)
-    if (levelQuestions.length === 0) {
-      console.log('⚠️ Keine level property, nutze Index-basierte Auswahl');
-      const startIdx = currentLevel * 3;
-      levelQuestions = game.questions.slice(startIdx, startIdx + 3);
-    }
-    
-    console.log('📊 Gefilterte Fragen für Level', currentLevel + 1, ':', levelQuestions.length);
-    
-    if (levelQuestions.length > 0) {
+    const selectRandomQuestion = () => {
+      console.log('🎯 Wähle Frage für Level:', currentLevel + 1);
+      console.log('📋 Alle Fragen:', game.questions.length);
+      
+      // Sicherstellen, dass game.questions existiert und ein Array ist
+      if (!Array.isArray(game.questions) || game.questions.length === 0) {
+        console.error('❌ Keine gültigen Fragen im Spiel gefunden!');
+        alert('Fehler: Dieses Spiel enthält keine gültigen Fragen.');
+        setView('archive');
+        return;
+      }
+      
+      let levelQuestions = game.questions.filter(q => q.level === currentLevel + 1);
+      
+      if (levelQuestions.length === 0) {
+        console.log('⚠️ Keine level property, nutze Index-basierte Auswahl');
+        const startIdx = currentLevel * 3;
+        levelQuestions = game.questions.slice(startIdx, startIdx + 3);
+      }
+      
+      console.log('📊 Gefilterte Fragen für Level', currentLevel + 1, ':', levelQuestions.length);
+      
+      if (levelQuestions.length === 0) {
+        console.error('❌ Keine Fragen für dieses Level gefunden!', currentLevel + 1);
+        alert('Fehler: Keine Fragen für dieses Level verfügbar.');
+        setView('archive');
+        return;
+      }
+      
       const randomQ = levelQuestions[Math.floor(Math.random() * levelQuestions.length)];
-      console.log('✅ Gewählte Frage:', randomQ.q);
+      console.log('✅ Gewählte Frage:', randomQ);
+      
+      // 🔥 KRITISCHE VALIDIERUNG: Prüfe ob Frage gültig ist
+      if (!randomQ || !randomQ.q || !Array.isArray(randomQ.a) || randomQ.a.length !== 4) {
+        console.error('❌ Ungültige Fragenstruktur:', randomQ);
+        console.error('randomQ:', randomQ);
+        console.error('randomQ.a:', randomQ?.a);
+        alert('Fehler: Diese Frage hat ein ungültiges Format. Bitte kontaktiere den Ersteller des Spiels.');
+        setView('archive');
+        return;
+      }
+      
+      // Prüfe ob correct Index gültig ist
+      if (typeof randomQ.correct !== 'number' || randomQ.correct < 0 || randomQ.correct >= randomQ.a.length) {
+        console.error('❌ Ungültiger correct Index:', randomQ.correct);
+        alert('Fehler: Die richtige Antwort ist nicht korrekt definiert.');
+        setView('archive');
+        return;
+      }
+      
       setCurrentQuestion(randomQ);
       
       // Antworten mischen
@@ -692,14 +720,18 @@ function GameView({ game, setView, playerName }: { game: Game; setView: any; pla
         const j = Math.floor(Math.random() * (i + 1));
         [answers[i], answers[j]] = [answers[j], answers[i]];
       }
+      
       setShuffledAnswers(answers.map(a => a.answer));
       setCorrectIndex(answers.findIndex(a => a.originalIndex === randomQ.correct));
-    } else {
-      console.error('❌ Keine Fragen für Level gefunden!', currentLevel + 1);
-    }
-    setSelectedAnswer(null);
-    setShowHint(false);
-  };
+      
+      console.log('✅ Frage erfolgreich geladen und Antworten gemischt');
+      
+      setSelectedAnswer(null);
+      setShowHint(false);
+    };
+
+    selectRandomQuestion();
+  }, [currentLevel, game, setView]);
 
   const handleAnswer = (answerIndex: number) => {
     setSelectedAnswer(answerIndex);
@@ -714,15 +746,14 @@ function GameView({ game, setView, playerName }: { game: Game; setView: any; pla
           setGameOver(true);
           setShowRating(true);
           if (game.id) {
-            updateGameStats(game.id, true);
+            updateGameStats(game.id);
             savePlayerScore({
               playerName,
               gameId: game.id,
               gameTitle: game.title,
               level: currentLevel + 1,
               earnedMoney: newMoney,
-              completed: true,
-              timestamp: Timestamp.now()
+              completed: true
             });
           }
         } else {
@@ -733,15 +764,14 @@ function GameView({ game, setView, playerName }: { game: Game; setView: any; pla
       } else {
         setGameOver(true);
         if (game.id) {
-          updateGameStats(game.id, false);
+          updateGameStats(game.id);
           savePlayerScore({
             playerName,
             gameId: game.id,
             gameTitle: game.title,
             level: currentLevel + 1,
             earnedMoney: earnedMoney,
-            completed: false,
-            timestamp: Timestamp.now()
+            completed: false
           });
         }
       }
@@ -763,78 +793,77 @@ function GameView({ game, setView, playerName }: { game: Game; setView: any; pla
     }
   };
 
- if (gameOver) {
-  return (
-    <div className="text-center text-white">
-      <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-12 max-w-2xl mx-auto border border-white border-opacity-20">
-        <h2 className="text-4xl font-bold mb-6 text-yellow-400">
-          {won ? '🎉 Gratuliere!' : '😢 Schade!'}
-        </h2>
-        <p className="text-6xl font-bold mb-6">{earnedMoney.toLocaleString()} CHF</p>
-        <p className="text-xl mb-8">
-          {won 
-            ? `Fantastisch ${playerName}! Du hast die Million gewonnen! 🏆` 
-            : `Leider verloren, ${playerName}! Du hast Level ${currentLevel + 1} erreicht.`}
-        </p>
+  if (gameOver) {
+    return (
+      <div className="text-center text-white">
+        <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-6 sm:p-12 max-w-2xl mx-auto border border-white border-opacity-20">
+          <h2 className="text-2xl sm:text-4xl font-bold mb-4 sm:mb-6 text-yellow-400">
+            {won ? '🎉 Gratuliere!' : '😢 Schade!'}
+          </h2>
+          <p className="text-4xl sm:text-6xl font-bold mb-4 sm:mb-6">{earnedMoney.toLocaleString()} CHF</p>
+          <p className="text-base sm:text-xl mb-6 sm:mb-8">
+            {won 
+              ? `Fantastisch ${playerName}! Du hast die Million gewonnen! 🏆` 
+              : `Leider verloren, ${playerName}! Du hast Level ${currentLevel + 1} erreicht.`}
+          </p>
 
-        {showRating && (
-          <div className="mb-8 p-6 bg-blue-900 bg-opacity-30 rounded-lg">
-            <h3 className="text-2xl font-bold mb-4">⭐ Bewerte dieses Spiel</h3>
-            <div className="flex justify-center space-x-2 mb-4">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  onClick={() => setUserRating(star)}
-                  className={`text-5xl transition transform hover:scale-110 ${
-                    star <= userRating ? 'text-yellow-400' : 'text-gray-500'
-                  }`}
-                >
-                  ⭐
-                </button>
-              ))}
+          {showRating && (
+            <div className="mb-6 sm:mb-8 p-4 sm:p-6 bg-blue-900 bg-opacity-30 rounded-lg">
+              <h3 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4">⭐ Bewerte dieses Spiel</h3>
+              <div className="flex justify-center space-x-2 mb-4">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setUserRating(star)}
+                    className={`text-3xl sm:text-5xl transition transform hover:scale-110 ${
+                      star <= userRating ? 'text-yellow-400' : 'text-gray-500'
+                    }`}
+                  >
+                    ⭐
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={handleRatingSubmit}
+                disabled={userRating === 0}
+                className="px-4 sm:px-6 py-2 sm:py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-bold rounded-lg transition text-sm sm:text-base"
+              >
+                Bewertung absenden
+              </button>
             </div>
+          )}
+
+          <div className="flex flex-col gap-3 sm:gap-4">
+            {!won && (
+              <button
+                onClick={() => {
+                  setCurrentLevel(0);
+                  setEarnedMoney(0);
+                  setJokerUsed(false);
+                  setShowHint(false);
+                  setGameOver(false);
+                  setWon(false);
+                  setSelectedAnswer(null);
+                  setShowRating(false);
+                  setUserRating(0);
+                }}
+                className="px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white text-lg sm:text-xl font-bold rounded-xl transition transform hover:scale-105"
+              >
+                🔄 Nochmal spielen
+              </button>
+            )}
+            
             <button
-              onClick={handleRatingSubmit}
-              disabled={userRating === 0}
-              className="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white font-bold rounded-lg transition"
+              onClick={() => setView('archive')}
+              className="px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg sm:text-xl font-bold rounded-xl transition transform hover:scale-105"
             >
-              Bewertung absenden
+              📚 Zurück zur Spieleübersicht
             </button>
           </div>
-        )}
-
-        <div className="flex flex-col gap-4">
-          {!won && (
-            <button
-              onClick={() => {
-                // Reset game state
-                setCurrentLevel(0);
-                setEarnedMoney(0);
-                setJokerUsed(false);
-                setShowHint(false);
-                setGameOver(false);
-                setWon(false);
-                setSelectedAnswer(null);
-                setShowRating(false);
-                setUserRating(0);
-              }}
-              className="px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white text-xl font-bold rounded-xl transition transform hover:scale-105"
-            >
-              🔄 Nochmal spielen
-            </button>
-          )}
-          
-          <button
-            onClick={() => setView('archive')}
-            className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-xl font-bold rounded-xl transition transform hover:scale-105"
-          >
-            📚 Zurück zur Spieleübersicht
-          </button>
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   if (!currentQuestion || shuffledAnswers.length === 0) {
     return <div className="text-white text-center">Lade Frage...</div>;
@@ -842,22 +871,24 @@ function GameView({ game, setView, playerName }: { game: Game; setView: any; pla
 
   return (
     <div className="text-white">
-      <div className="mb-4 flex justify-between items-center">
-        <h2 className="text-3xl font-bold text-yellow-400">{game.title}</h2>
+      {/* Header - Mobile optimiert */}
+      <div className="mb-4 flex flex-col sm:flex-row justify-between items-center gap-3">
+        <h2 className="text-xl sm:text-3xl font-bold text-yellow-400">{game.title}</h2>
         <button
           onClick={() => setView('archive')}
-          className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg"
+          className="px-3 sm:px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-lg text-sm sm:text-base"
         >
           Beenden
         </button>
       </div>
 
-      <div className="mb-8 flex justify-between items-center">
-        <div className="flex space-x-2">
+      {/* Level Anzeige - Mobile optimiert mit Scroll */}
+      <div className="mb-6 sm:mb-8">
+        <div className="flex space-x-1 sm:space-x-2 overflow-x-auto pb-2">
           {LEVELS.map((level, idx) => (
             <div
               key={level}
-              className={`px-4 py-2 rounded-lg font-bold ${
+              className={`px-2 sm:px-4 py-1 sm:py-2 rounded-lg font-bold text-xs sm:text-base whitespace-nowrap ${
                 idx === currentLevel
                   ? 'bg-yellow-500 text-black'
                   : idx < currentLevel
@@ -869,10 +900,12 @@ function GameView({ game, setView, playerName }: { game: Game; setView: any; pla
             </div>
           ))}
         </div>
+        
+        {/* Joker Button */}
         <button
           onClick={useJoker}
           disabled={jokerUsed || !currentQuestion.hint}
-          className={`px-6 py-3 rounded-lg font-bold ${
+          className={`mt-3 w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-bold text-sm sm:text-base ${
             jokerUsed || !currentQuestion.hint
               ? 'bg-gray-600 cursor-not-allowed'
               : 'bg-orange-500 hover:bg-orange-600'
@@ -882,26 +915,30 @@ function GameView({ game, setView, playerName }: { game: Game; setView: any; pla
         </button>
       </div>
 
-      <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-8 border border-white border-opacity-20">
-        <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-2xl p-8 mb-8 shadow-2xl border-4 border-white border-opacity-20">
-          <h3 className="text-3xl font-bold text-center text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.9)]">
+      {/* Frage und Antworten */}
+      <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-4 sm:p-8 border border-white border-opacity-20">
+        {/* Frage - Mobile optimiert */}
+        <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-2xl p-4 sm:p-8 mb-6 sm:mb-8 shadow-2xl border-4 border-white border-opacity-20">
+          <h3 className="text-lg sm:text-2xl md:text-3xl font-bold text-center text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.9)]">
             {currentQuestion.q}
           </h3>
         </div>
         
+        {/* Hinweis */}
         {showHint && currentQuestion.hint && (
-          <div className="mb-6 p-4 bg-orange-500 bg-opacity-30 rounded-lg border border-orange-400">
-            <p className="text-lg">💡 Hinweis: {currentQuestion.hint}</p>
+          <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-orange-500 bg-opacity-30 rounded-lg border border-orange-400">
+            <p className="text-sm sm:text-base md:text-lg">💡 Hinweis: {currentQuestion.hint}</p>
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
+        {/* Antworten - Mobile optimiert */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           {shuffledAnswers.map((answer, idx) => (
             <button
               key={idx}
               onClick={() => handleAnswer(idx)}
               disabled={selectedAnswer !== null}
-              className={`p-6 rounded-xl text-xl font-semibold transition transform hover:scale-105 ${
+              className={`p-3 sm:p-6 rounded-xl text-sm sm:text-lg md:text-xl font-semibold transition transform hover:scale-105 ${
                 selectedAnswer === idx
                   ? idx === correctIndex
                     ? 'bg-green-600'
@@ -911,7 +948,8 @@ function GameView({ game, setView, playerName }: { game: Game; setView: any; pla
                   : 'bg-blue-600 hover:bg-blue-700'
               }`}
             >
-              {String.fromCharCode(65 + idx)}: {answer}
+              <span className="block sm:inline">{String.fromCharCode(65 + idx)}:</span>{' '}
+              <span>{answer}</span>
             </button>
           ))}
         </div>
