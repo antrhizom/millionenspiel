@@ -14,7 +14,8 @@ import {
   updateDoc,
   increment,
   arrayUnion,
-  getDoc // Import getDoc for fetching a single document
+  getDoc,
+  DocumentData,
 } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -51,7 +52,7 @@ interface Game {
   rating: number;
   ratings?: number[];
   questions: Question[];
-  createdAt?: Timestamp;
+  createdAt: Timestamp;
   creator: string;
 }
 
@@ -66,7 +67,7 @@ interface PlayerScore {
   timestamp: Timestamp;
 }
 
-async function saveGame(game: Game): Promise<string> {
+async function saveGame(game: Omit<Game, 'id' | 'createdAt' | 'plays' | 'rating' | 'ratings'>): Promise<string> {
   try {
     const gameData = {
       ...game,
@@ -96,12 +97,20 @@ async function loadAllGames(): Promise<Game[]> {
     
     const games: Game[] = [];
     snapshot.forEach((docSnap) => {
-      const gameData = docSnap.data() as Omit<Game, 'id'>;
-      console.log('✅ Spiel geladen:', gameData.title);
-      games.push({
-        ...gameData,
-        id: docSnap.id
-      });
+      const data = docSnap.data() as DocumentData;
+      const game: Game = {
+        id: docSnap.id,
+        title: data.title,
+        topic: data.topic,
+        difficulty: data.difficulty,
+        plays: data.plays,
+        rating: data.rating,
+        ratings: data.ratings,
+        questions: data.questions,
+        createdAt: data.createdAt,
+        creator: data.creator,
+      };
+      games.push(game);
     });
     
     console.log('✅ Alle Spiele geladen:', games.length);
@@ -166,18 +175,24 @@ async function savePlayerScore(playerScore: Omit<PlayerScore, 'id' | 'timestamp'
 
 async function getPlayerScores(playerName: string): Promise<PlayerScore[]> {
   try {
-    const scoresRef = collection(db, 'playerScores');
     const q = query(collection(db, "playerScores"));
     const snapshot = await getDocs(q);
     
     const scores: PlayerScore[] = [];
     snapshot.forEach((docSnap) => {
-      const data = docSnap.data() as Omit<PlayerScore, 'id'>;
+      const data = docSnap.data() as DocumentData;
       if (data.playerName === playerName) {
-        scores.push({
-          ...data,
-          id: docSnap.id
-        });
+        const score: PlayerScore = {
+          id: docSnap.id,
+          playerName: data.playerName,
+          gameId: data.gameId,
+          gameTitle: data.gameTitle,
+          level: data.level,
+          earnedMoney: data.earnedMoney,
+          completed: data.completed,
+          timestamp: data.timestamp,
+        };
+        scores.push(score);
       }
     });
     
@@ -195,10 +210,18 @@ async function getAllPlayerScores(): Promise<PlayerScore[]> {
     
     const scores: PlayerScore[] = [];
     snapshot.forEach((docSnap) => {
-      scores.push({
-        ...(docSnap.data() as Omit<PlayerScore, 'id'>),
-        id: docSnap.id
-      });
+      const data = docSnap.data() as DocumentData;
+      const score: PlayerScore = {
+        id: docSnap.id,
+        playerName: data.playerName,
+        gameId: data.gameId,
+        gameTitle: data.gameTitle,
+        level: data.level,
+        earnedMoney: data.earnedMoney,
+        completed: data.completed,
+        timestamp: data.timestamp,
+      };
+      scores.push(score);
     });
     
     return scores.sort((a, b) => b.earnedMoney - a.earnedMoney);
@@ -950,17 +973,15 @@ function CreateView({ setView, playerName }: CreateViewProps) {
 
       const { questions } = await response.json();
 
-      const newGame: Omit<Game, 'id' | 'createdAt' | 'ratings'> = {
+      const newGame: Omit<Game, 'id' | 'createdAt' | 'ratings' | 'plays' | 'rating'> = {
         title,
         topic,
         difficulty,
-        plays: 0,
-        rating: 0,
         creator: playerName,
         questions
       };
 
-      await saveGame(newGame as Game);
+      await saveGame(newGame);
       alert('Spiel erfolgreich erstellt! ✅');
       setView('archive');
     } catch (err: unknown) {
