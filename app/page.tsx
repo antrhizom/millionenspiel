@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, Dispatch, SetStateAction, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, Timestamp } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import { 
   collection, 
   addDoc, 
@@ -13,9 +13,8 @@ import {
   limit,
   updateDoc,
   increment,
-  arrayUnion,
-  getDoc,
-  DocumentData,
+  Timestamp,
+  arrayUnion
 } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -31,8 +30,6 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0
 const db = getFirestore(app);
 
 const LEVELS = [10, 100, 1000, 10000, 100000, 1000000];
-
-type View = 'archive' | 'game' | 'create' | 'dashboard';
 
 interface Question {
   level: number;
@@ -51,7 +48,7 @@ interface Game {
   rating: number;
   ratings?: number[];
   questions: Question[];
-  createdAt: Timestamp;
+  createdAt?: any;
   creator: string;
 }
 
@@ -63,10 +60,10 @@ interface PlayerScore {
   level: number;
   earnedMoney: number;
   completed: boolean;
-  timestamp: Timestamp;
+  timestamp: any;
 }
 
-async function saveGame(game: Omit<Game, 'id' | 'createdAt' | 'plays' | 'rating' | 'ratings'>): Promise<string> {
+async function saveGame(game: Game): Promise<string> {
   try {
     const gameData = {
       ...game,
@@ -96,20 +93,12 @@ async function loadAllGames(): Promise<Game[]> {
     
     const games: Game[] = [];
     snapshot.forEach((docSnap) => {
-      const data = docSnap.data() as DocumentData;
-      const game: Game = {
-        id: docSnap.id,
-        title: data.title,
-        topic: data.topic,
-        difficulty: data.difficulty,
-        plays: data.plays,
-        rating: data.rating,
-        ratings: data.ratings,
-        questions: data.questions,
-        createdAt: data.createdAt,
-        creator: data.creator,
-      };
-      games.push(game);
+      const gameData = docSnap.data() as Game;
+      console.log('✅ Spiel geladen:', gameData.title);
+      games.push({
+        ...gameData,
+        id: docSnap.id
+      });
     });
     
     console.log('✅ Alle Spiele geladen:', games.length);
@@ -120,7 +109,7 @@ async function loadAllGames(): Promise<Game[]> {
   }
 }
 
-async function updateGameStats(gameId: string) {
+async function updateGameStats(gameId: string, won: boolean) {
   try {
     if (!gameId) return;
     
@@ -144,15 +133,17 @@ async function addRating(gameId: string, rating: number) {
       ratings: arrayUnion(rating)
     });
     
-    const gameSnap = await getDoc(gameRef);
-    if (gameSnap.exists()) {
-        const data = gameSnap.data();
+    const gameDoc = await getDocs(query(collection(db, 'games')));
+    gameDoc.forEach(async (docSnap) => {
+      if (docSnap.id === gameId) {
+        const data = docSnap.data();
         const ratings = data.ratings || [];
-        const avg = ratings.length > 0
-            ? ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length
-            : 0;
+        const avg = ratings.length > 0 
+          ? ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length 
+          : 0;
         await updateDoc(gameRef, { rating: avg });
-    }
+      }
+    });
     
     console.log('Bewertung hinzugefügt');
   } catch (error) {
@@ -160,7 +151,7 @@ async function addRating(gameId: string, rating: number) {
   }
 }
 
-async function savePlayerScore(playerScore: Omit<PlayerScore, 'id' | 'timestamp'>): Promise<void> {
+async function savePlayerScore(playerScore: PlayerScore): Promise<void> {
   try {
     await addDoc(collection(db, 'playerScores'), {
       ...playerScore,
@@ -174,24 +165,17 @@ async function savePlayerScore(playerScore: Omit<PlayerScore, 'id' | 'timestamp'
 
 async function getPlayerScores(playerName: string): Promise<PlayerScore[]> {
   try {
-    const q = query(collection(db, "playerScores"));
-    const snapshot = await getDocs(q);
+    const scoresRef = collection(db, 'playerScores');
+    const snapshot = await getDocs(scoresRef);
     
     const scores: PlayerScore[] = [];
     snapshot.forEach((docSnap) => {
-      const data = docSnap.data() as DocumentData;
+      const data = docSnap.data() as PlayerScore;
       if (data.playerName === playerName) {
-        const score: PlayerScore = {
-          id: docSnap.id,
-          playerName: data.playerName,
-          gameId: data.gameId,
-          gameTitle: data.gameTitle,
-          level: data.level,
-          earnedMoney: data.earnedMoney,
-          completed: data.completed,
-          timestamp: data.timestamp,
-        };
-        scores.push(score);
+        scores.push({
+          ...data,
+          id: docSnap.id
+        });
       }
     });
     
@@ -209,18 +193,10 @@ async function getAllPlayerScores(): Promise<PlayerScore[]> {
     
     const scores: PlayerScore[] = [];
     snapshot.forEach((docSnap) => {
-      const data = docSnap.data() as DocumentData;
-      const score: PlayerScore = {
-        id: docSnap.id,
-        playerName: data.playerName,
-        gameId: data.gameId,
-        gameTitle: data.gameTitle,
-        level: data.level,
-        earnedMoney: data.earnedMoney,
-        completed: data.completed,
-        timestamp: data.timestamp,
-      };
-      scores.push(score);
+      scores.push({
+        ...docSnap.data() as PlayerScore,
+        id: docSnap.id
+      });
     });
     
     return scores.sort((a, b) => b.earnedMoney - a.earnedMoney);
@@ -231,10 +207,11 @@ async function getAllPlayerScores(): Promise<PlayerScore[]> {
 }
 
 export default function Home() {
-  const [view, setView] = useState<View>('archive');
+  const [view, setView] = useState<'archive' | 'game' | 'create' | 'dashboard'>('archive');
   const [currentGame, setCurrentGame] = useState<Game | null>(null);
   const [playerName, setPlayerName] = useState<string>('');
 
+  // Lade gespeicherten Nutzernamen beim Start (automatisch)
   useEffect(() => {
     const savedName = localStorage.getItem('millionenspiel_playerName');
     if (savedName) {
@@ -317,33 +294,33 @@ export default function Home() {
   );
 }
 
-function PlayerNameInput({ setPlayerName }: { setPlayerName: Dispatch<SetStateAction<string>> }) {
+function PlayerNameInput({ setPlayerName }: any) {
   const [generatedName, setGeneratedName] = useState('');
   const [showExistingNameInput, setShowExistingNameInput] = useState(false);
   const [existingName, setExistingName] = useState('');
 
-  const adjectives = useMemo(() => [
+  useEffect(() => {
+    generateRandomName();
+  }, []);
+
+  const adjectives = [
     'Schnelle', 'Kluge', 'Mutige', 'Lustige', 'Starke', 'Kreative', 'Coole', 
     'Wilde', 'Clevere', 'Geniale', 'Magische', 'Legendäre', 'Epische', 'Ninja',
     'Mystische', 'Goldene', 'Silberne', 'Fliegende', 'Tanzende', 'Singende'
-  ], []);
+  ];
 
-  const nouns = useMemo(() => [
+  const nouns = [
     'Fuchs', 'Adler', 'Tiger', 'Panda', 'Delfin', 'Löwe', 'Wolf', 'Bär',
     'Drache', 'Phönix', 'Einhorn', 'Falke', 'Gepard', 'Hai', 'Panther',
     'Affe', 'Eule', 'Rabe', 'Salamander', 'Kobra'
-  ], []);
+  ];
 
-  const generateRandomName = useCallback(() => {
+  const generateRandomName = () => {
     const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
     const noun = nouns[Math.floor(Math.random() * nouns.length)];
     const num = Math.floor(Math.random() * 99) + 1;
     setGeneratedName(`${adj}${noun}${num}`);
-  }, [adjectives, nouns]);
-
-  useEffect(() => {
-    generateRandomName();
-  }, [generateRandomName]);
+  };
 
   const handleSubmitGenerated = () => {
     if (generatedName.trim()) {
@@ -371,6 +348,7 @@ function PlayerNameInput({ setPlayerName }: { setPlayerName: Dispatch<SetStateAc
 
         {!showExistingNameInput ? (
           <div>
+            {/* Neuer generierter Name */}
             <div className="mb-6 p-4 bg-blue-500 bg-opacity-20 border-2 border-blue-400 rounded-lg">
               <div className="flex items-start gap-3">
                 <div className="text-3xl">🎲</div>
@@ -397,12 +375,13 @@ function PlayerNameInput({ setPlayerName }: { setPlayerName: Dispatch<SetStateAc
                     onClick={handleSubmitGenerated}
                     className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white text-lg font-bold rounded-xl transition transform hover:scale-105"
                   >
-                    Mit &quot;{generatedName}&quot; spielen 🚀
+                    Mit "{generatedName}" spielen 🚀
                   </button>
                 </div>
               </div>
             </div>
 
+            {/* Button für bestehende Spieler */}
             <div className="mt-4">
               <button
                 onClick={() => setShowExistingNameInput(true)}
@@ -414,6 +393,7 @@ function PlayerNameInput({ setPlayerName }: { setPlayerName: Dispatch<SetStateAc
           </div>
         ) : (
           <>
+            {/* Bestehenden Namen eingeben */}
             <div className="mb-6 p-4 bg-orange-500 bg-opacity-20 border-2 border-orange-400 rounded-lg">
               <div className="flex items-start gap-3">
                 <div className="text-3xl">🔑</div>
@@ -438,12 +418,13 @@ function PlayerNameInput({ setPlayerName }: { setPlayerName: Dispatch<SetStateAc
                     disabled={!existingName.trim()}
                     className="w-full px-6 py-3 bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 disabled:from-gray-600 disabled:to-gray-700 text-white text-lg font-bold rounded-xl transition transform hover:scale-105"
                   >
-                    Mit &quot;{existingName || '...'}&quot; anmelden 🎮
+                    Mit "{existingName || '...'}" anmelden 🎮
                   </button>
                 </div>
               </div>
             </div>
 
+            {/* Zurück-Button */}
             <button
               onClick={() => {
                 setShowExistingNameInput(false);
@@ -456,6 +437,7 @@ function PlayerNameInput({ setPlayerName }: { setPlayerName: Dispatch<SetStateAc
           </>
         )}
 
+        {/* Info-Box */}
         <div className="mt-6 p-3 bg-gray-800 bg-opacity-50 rounded-lg">
           <p className="text-xs text-gray-300 text-center">
             💡 <strong>Wichtig:</strong> Namen werden automatisch generiert. Merke dir deinen Namen, um später auf deine Statistiken zugreifen zu können!
@@ -466,13 +448,7 @@ function PlayerNameInput({ setPlayerName }: { setPlayerName: Dispatch<SetStateAc
   );
 }
 
-interface ArchiveViewProps {
-    setCurrentGame: Dispatch<SetStateAction<Game | null>>;
-    setView: Dispatch<SetStateAction<View>>;
-    playerName: string;
-}
-
-function ArchiveView({ setCurrentGame, setView, playerName }: ArchiveViewProps) {
+function ArchiveView({ setCurrentGame, setView, playerName }: any) {
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterTopic, setFilterTopic] = useState('Alle');
@@ -481,19 +457,20 @@ function ArchiveView({ setCurrentGame, setView, playerName }: ArchiveViewProps) 
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const loadGames = async () => {
-      setLoading(true);
-      try {
-        const allGames = await loadAllGames();
-        setGames(allGames);
-      } catch (error) {
-        console.error('❌ Archiv: Fehler beim Laden:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
     loadGames();
   }, []);
+
+  const loadGames = async () => {
+    setLoading(true);
+    try {
+      const allGames = await loadAllGames();
+      setGames(allGames);
+    } catch (error) {
+      console.error('❌ Archiv: Fehler beim Laden:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const selectGame = (game: Game) => {
     setCurrentGame(game);
@@ -520,8 +497,9 @@ function ArchiveView({ setCurrentGame, setView, playerName }: ArchiveViewProps) 
     .sort((a, b) => {
       if (sortBy === 'rating') return (b.rating || 0) - (a.rating || 0);
       if (sortBy === 'plays') return (b.plays || 0) - (a.plays || 0);
-      const at = a.createdAt?.toMillis() ?? 0;
-      const bt = b.createdAt?.toMillis() ?? 0;
+      // 'date' – createdAt kann fehlen, daher stabil sortieren
+      const at = (a as any).createdAt?.toMillis?.() ?? 0;
+      const bt = (b as any).createdAt?.toMillis?.() ?? 0;
       return bt - at;
     });
 
@@ -557,6 +535,7 @@ function ArchiveView({ setCurrentGame, setView, playerName }: ArchiveViewProps) 
         )}
       </p>
 
+      {/* Filterleiste */}
       <div className="mb-8 bg-white/70 dark:bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/40 dark:border-white/20">
         <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">🔍 Suchen & Filtern</h3>
         <div className="grid md:grid-cols-4 gap-4">
@@ -591,7 +570,7 @@ function ArchiveView({ setCurrentGame, setView, playerName }: ArchiveViewProps) 
 
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as 'date' | 'rating' | 'plays')}
+            onChange={(e) => setSortBy(e.target.value as any)}
             className="px-4 py-2 rounded-lg border-2 bg-white/90 text-gray-900 border-gray-300 focus:border-blue-500 focus:outline-none dark:bg-gray-800 dark:text-white dark:border-gray-600 dark:focus:border-blue-400"
           >
             <option value="date">Neueste zuerst</option>
@@ -601,6 +580,7 @@ function ArchiveView({ setCurrentGame, setView, playerName }: ArchiveViewProps) 
         </div>
       </div>
 
+      {/* Karten */}
       {games.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-xl mb-4 text-gray-700 dark:text-gray-300">Noch keine Spiele vorhanden.</p>
@@ -622,10 +602,12 @@ function ArchiveView({ setCurrentGame, setView, playerName }: ArchiveViewProps) 
               key={game.id}
               className="rounded-2xl p-6 bg-white/90 text-gray-900 border border-gray-200 hover:shadow-lg transition dark:bg-white/10 dark:text-white dark:border-white/20"
             >
+              {/* TITEL zuerst (wichtig) */}
               <h3 className="text-2xl font-extrabold mb-1 tracking-tight">
                 {game.title || 'Ohne Titel'}
               </h3>
 
+              {/* Thema & Creator als Unterzeile */}
               <div className="text-sm mb-3">
                 <div className="text-gray-600 dark:text-gray-300">
                   📖 {game.topic || 'Ohne Thema'}
@@ -665,13 +647,7 @@ function ArchiveView({ setCurrentGame, setView, playerName }: ArchiveViewProps) 
   );
 }
 
-interface GameViewProps {
-    game: Game;
-    setView: Dispatch<SetStateAction<View>>;
-    playerName: string;
-}
-
-function GameView({ game, setView, playerName }: GameViewProps) {
+function GameView({ game, setView, playerName }: { game: Game; setView: any; playerName: string }) {
   const [currentLevel, setCurrentLevel] = useState(0);
   const [earnedMoney, setEarnedMoney] = useState(0);
   const [jokerUsed, setJokerUsed] = useState(false);
@@ -686,41 +662,44 @@ function GameView({ game, setView, playerName }: GameViewProps) {
   const [userRating, setUserRating] = useState(0);
 
   useEffect(() => {
-    const selectRandomQuestion = () => {
-      console.log('🎯 Wähle Frage für Level:', currentLevel + 1);
-      console.log('📋 Alle Fragen:', game.questions.length);
-      
-      let levelQuestions = game.questions.filter(q => q.level === currentLevel + 1);
-      
-      if (levelQuestions.length === 0) {
-        console.log('⚠️ Keine level property, nutze Index-basierte Auswahl');
-        const startIdx = currentLevel * 3;
-        levelQuestions = game.questions.slice(startIdx, startIdx + 3);
-      }
-      
-      console.log('📊 Gefilterte Fragen für Level', currentLevel + 1, ':', levelQuestions.length);
-      
-      if (levelQuestions.length > 0) {
-        const randomQ = levelQuestions[Math.floor(Math.random() * levelQuestions.length)];
-        console.log('✅ Gewählte Frage:', randomQ.q);
-        setCurrentQuestion(randomQ);
-        
-        const answers = randomQ.a.map((answer, index) => ({ answer, originalIndex: index }));
-        for (let i = answers.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [answers[i], answers[j]] = [answers[j], answers[i]];
-        }
-        setShuffledAnswers(answers.map(a => a.answer));
-        setCorrectIndex(answers.findIndex(a => a.originalIndex === randomQ.correct));
-      } else {
-        console.error('❌ Keine Fragen für Level gefunden!', currentLevel + 1);
-      }
-      setSelectedAnswer(null);
-      setShowHint(false);
-    };
-
     selectRandomQuestion();
   }, [currentLevel, game]);
+
+  const selectRandomQuestion = () => {
+    console.log('🎯 Wähle Frage für Level:', currentLevel + 1);
+    console.log('📋 Alle Fragen:', game.questions.length);
+    
+    // Filter nach Level - falls level property existiert
+    let levelQuestions = game.questions.filter(q => q.level === currentLevel + 1);
+    
+    // Fallback: Wenn keine level property, nehme Fragen nach Index (alte Struktur)
+    if (levelQuestions.length === 0) {
+      console.log('⚠️ Keine level property, nutze Index-basierte Auswahl');
+      const startIdx = currentLevel * 3;
+      levelQuestions = game.questions.slice(startIdx, startIdx + 3);
+    }
+    
+    console.log('📊 Gefilterte Fragen für Level', currentLevel + 1, ':', levelQuestions.length);
+    
+    if (levelQuestions.length > 0) {
+      const randomQ = levelQuestions[Math.floor(Math.random() * levelQuestions.length)];
+      console.log('✅ Gewählte Frage:', randomQ.q);
+      setCurrentQuestion(randomQ);
+      
+      // Antworten mischen
+      const answers = randomQ.a.map((answer, index) => ({ answer, originalIndex: index }));
+      for (let i = answers.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [answers[i], answers[j]] = [answers[j], answers[i]];
+      }
+      setShuffledAnswers(answers.map(a => a.answer));
+      setCorrectIndex(answers.findIndex(a => a.originalIndex === randomQ.correct));
+    } else {
+      console.error('❌ Keine Fragen für Level gefunden!', currentLevel + 1);
+    }
+    setSelectedAnswer(null);
+    setShowHint(false);
+  };
 
   const handleAnswer = (answerIndex: number) => {
     setSelectedAnswer(answerIndex);
@@ -735,14 +714,15 @@ function GameView({ game, setView, playerName }: GameViewProps) {
           setGameOver(true);
           setShowRating(true);
           if (game.id) {
-            updateGameStats(game.id);
+            updateGameStats(game.id, true);
             savePlayerScore({
               playerName,
               gameId: game.id,
               gameTitle: game.title,
               level: currentLevel + 1,
               earnedMoney: newMoney,
-              completed: true
+              completed: true,
+              timestamp: Timestamp.now()
             });
           }
         } else {
@@ -753,14 +733,15 @@ function GameView({ game, setView, playerName }: GameViewProps) {
       } else {
         setGameOver(true);
         if (game.id) {
-          updateGameStats(game.id);
+          updateGameStats(game.id, false);
           savePlayerScore({
             playerName,
             gameId: game.id,
             gameTitle: game.title,
             level: currentLevel + 1,
             earnedMoney: earnedMoney,
-            completed: false
+            completed: false,
+            timestamp: Timestamp.now()
           });
         }
       }
@@ -917,12 +898,7 @@ function GameView({ game, setView, playerName }: GameViewProps) {
   );
 }
 
-interface CreateViewProps {
-    setView: Dispatch<SetStateAction<View>>;
-    playerName: string;
-}
-
-function CreateView({ setView, playerName }: CreateViewProps) {
+function CreateView({ setView, playerName }: any) {
   const [text, setText] = useState('');
   const [title, setTitle] = useState('');
   const [topic, setTopic] = useState('');
@@ -930,19 +906,128 @@ function CreateView({ setView, playerName }: CreateViewProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Umfassende Themenliste
   const themenKategorien = {
-    'MINT - Mathematik': ['Arithmetik & Algebra', 'Geometrie', 'Trigonometrie', 'Analysis & Calculus', 'Statistik & Wahrscheinlichkeit', 'Lineare Algebra', 'Zahlentheorie', 'Diskrete Mathematik'],
-    'MINT - Informatik': ['Programmierung', 'Algorithmen & Datenstrukturen', 'Datenbanken', 'Künstliche Intelligenz', 'Cybersecurity', 'Netzwerke', 'Web-Entwicklung', 'Software Engineering'],
-    'MINT - Naturwissenschaften': ['Physik - Mechanik', 'Physik - Elektrizität & Magnetismus', 'Physik - Optik', 'Chemie - Allgemein', 'Chemie - Organisch', 'Chemie - Anorganisch', 'Biologie - Zellbiologie', 'Biologie - Genetik', 'Biologie - Evolution', 'Biologie - Ökologie', 'Astronomie', 'Geologie'],
-    'MINT - Technik & Ingenieurwesen': ['Elektrotechnik', 'Maschinenbau', 'Bauingenieurwesen', 'Robotik', 'Energietechnik', 'Materialwissenschaften'],
-    'Geisteswissenschaften - Sprachen': ['Deutsch - Grammatik', 'Deutsch - Literatur', 'Englisch', 'Französisch', 'Spanisch', 'Italienisch', 'Latein', 'Altgriechisch'],
-    'Geisteswissenschaften - Geschichte': ['Alte Geschichte', 'Mittelalter', 'Neuzeit', 'Zeitgeschichte', 'Schweizer Geschichte', 'Europäische Geschichte', 'Weltgeschichte', 'Kunstgeschichte'],
-    'Geisteswissenschaften - Gesellschaft': ['Philosophie', 'Ethik', 'Religion', 'Psychologie', 'Soziologie', 'Politik', 'Wirtschaft', 'Recht'],
-    'Geisteswissenschaften - Kultur': ['Literatur', 'Musik', 'Kunst & Malerei', 'Theater', 'Film', 'Architektur', 'Medienwissenschaften'],
-    'Geografie & Umwelt': ['Physische Geografie', 'Humangeografie', 'Länder & Hauptstädte', 'Klima & Wetter', 'Umweltschutz', 'Nachhaltigkeit'],
-    'Alltag & Gesellschaft': ['Gesundheit & Medizin', 'Ernährung', 'Erste Hilfe', 'Verkehr & Mobilität', 'Wohnen', 'Finanzen & Versicherungen', 'Beruf & Karriere', 'Medien & Kommunikation'],
-    'Freizeit & Hobby': ['Sport - Fussball', 'Sport - Tennis', 'Sport - Ski & Snowboard', 'Sport - Schwimmen', 'Sport - Leichtathletik', 'Kochen & Backen', 'Gärtnern', 'Fotografie', 'Reisen & Tourismus', 'Spiele & Gaming', 'Handwerk & DIY'],
-    'Diverses': ['Allgemeinwissen', 'Schweizer Kultur', 'Feiertage & Bräuche', 'Promis & Unterhaltung', 'Technik im Alltag', 'Mode & Lifestyle']
+    'MINT - Mathematik': [
+      'Arithmetik & Algebra',
+      'Geometrie',
+      'Trigonometrie',
+      'Analysis & Calculus',
+      'Statistik & Wahrscheinlichkeit',
+      'Lineare Algebra',
+      'Zahlentheorie',
+      'Diskrete Mathematik'
+    ],
+    'MINT - Informatik': [
+      'Programmierung',
+      'Algorithmen & Datenstrukturen',
+      'Datenbanken',
+      'Künstliche Intelligenz',
+      'Cybersecurity',
+      'Netzwerke',
+      'Web-Entwicklung',
+      'Software Engineering'
+    ],
+    'MINT - Naturwissenschaften': [
+      'Physik - Mechanik',
+      'Physik - Elektrizität & Magnetismus',
+      'Physik - Optik',
+      'Chemie - Allgemein',
+      'Chemie - Organisch',
+      'Chemie - Anorganisch',
+      'Biologie - Zellbiologie',
+      'Biologie - Genetik',
+      'Biologie - Evolution',
+      'Biologie - Ökologie',
+      'Astronomie',
+      'Geologie'
+    ],
+    'MINT - Technik & Ingenieurwesen': [
+      'Elektrotechnik',
+      'Maschinenbau',
+      'Bauingenieurwesen',
+      'Robotik',
+      'Energietechnik',
+      'Materialwissenschaften'
+    ],
+    'Geisteswissenschaften - Sprachen': [
+      'Deutsch - Grammatik',
+      'Deutsch - Literatur',
+      'Englisch',
+      'Französisch',
+      'Spanisch',
+      'Italienisch',
+      'Latein',
+      'Altgriechisch'
+    ],
+    'Geisteswissenschaften - Geschichte': [
+      'Alte Geschichte',
+      'Mittelalter',
+      'Neuzeit',
+      'Zeitgeschichte',
+      'Schweizer Geschichte',
+      'Europäische Geschichte',
+      'Weltgeschichte',
+      'Kunstgeschichte'
+    ],
+    'Geisteswissenschaften - Gesellschaft': [
+      'Philosophie',
+      'Ethik',
+      'Religion',
+      'Psychologie',
+      'Soziologie',
+      'Politik',
+      'Wirtschaft',
+      'Recht'
+    ],
+    'Geisteswissenschaften - Kultur': [
+      'Literatur',
+      'Musik',
+      'Kunst & Malerei',
+      'Theater',
+      'Film',
+      'Architektur',
+      'Medienwissenschaften'
+    ],
+    'Geografie & Umwelt': [
+      'Physische Geografie',
+      'Humangeografie',
+      'Länder & Hauptstädte',
+      'Klima & Wetter',
+      'Umweltschutz',
+      'Nachhaltigkeit'
+    ],
+    'Alltag & Gesellschaft': [
+      'Gesundheit & Medizin',
+      'Ernährung',
+      'Erste Hilfe',
+      'Verkehr & Mobilität',
+      'Wohnen',
+      'Finanzen & Versicherungen',
+      'Beruf & Karriere',
+      'Medien & Kommunikation'
+    ],
+    'Freizeit & Hobby': [
+      'Sport - Fussball',
+      'Sport - Tennis',
+      'Sport - Ski & Snowboard',
+      'Sport - Schwimmen',
+      'Sport - Leichtathletik',
+      'Kochen & Backen',
+      'Gärtnern',
+      'Fotografie',
+      'Reisen & Tourismus',
+      'Spiele & Gaming',
+      'Handwerk & DIY'
+    ],
+    'Diverses': [
+      'Allgemeinwissen',
+      'Schweizer Kultur',
+      'Feiertage & Bräuche',
+      'Promis & Unterhaltung',
+      'Technik im Alltag',
+      'Mode & Lifestyle'
+    ]
   };
 
   const handleGenerate = async () => {
@@ -972,10 +1057,12 @@ function CreateView({ setView, playerName }: CreateViewProps) {
 
       const { questions } = await response.json();
 
-      const newGame: Omit<Game, 'id' | 'createdAt' | 'ratings' | 'plays' | 'rating'> = {
+      const newGame: Game = {
         title,
         topic,
         difficulty,
+        plays: 0,
+        rating: 0,
         creator: playerName,
         questions
       };
@@ -983,17 +1070,14 @@ function CreateView({ setView, playerName }: CreateViewProps) {
       await saveGame(newGame);
       alert('Spiel erfolgreich erstellt! ✅');
       setView('archive');
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message || 'Fehler bei der Fragengenerierung');
-      } else {
-        setError('Ein unbekannter Fehler ist aufgetreten.');
-      }
+    } catch (error: any) {
+      setError(error.message || 'Fehler bei der Fragengenerierung');
     } finally {
       setLoading(false);
     }
   };
 
+  // Styles für gute Lesbarkeit auf hellem & dunklem Hintergrund
   const fieldBase = 'w-full px-4 py-3 rounded-lg border-2 focus:outline-none transition';
   const fieldColors = 'bg-white/90 text-gray-900 border-gray-300 focus:border-blue-500 ' +
                       'dark:bg-gray-800 dark:text-white dark:border-gray-600 dark:focus:border-blue-400';
@@ -1081,7 +1165,7 @@ function CreateView({ setView, playerName }: CreateViewProps) {
             aria-label="Lerntext"
           />
           <div className="absolute bottom-2 right-3 text-xs text-gray-600 dark:text-gray-400">
-            {text.length} / 10&apos;000 Zeichen
+            {text.length} / 10'000 Zeichen
           </div>
         </div>
         <p className={`${helpCls} mt-2`}>Tipp: 1–3 gut strukturierte Absätze liefern die besten Fragen.</p>
@@ -1114,6 +1198,7 @@ function CreateView({ setView, playerName }: CreateViewProps) {
 
 
 function DashboardView({ playerName }: { playerName: string }) {
+  // ---------- Hilfskomponente: Einheitliche Überschriften (Icon + Label) ----------
  const SectionHeader = ({
   icon,
   label,
@@ -1135,6 +1220,7 @@ function DashboardView({ playerName }: { playerName: string }) {
   const [allGames, setAllGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // ---- Filter-States ----
   const [filterTopic, setFilterTopic] = useState<string>("Alle");
   const [filterDifficulty, setFilterDifficulty] = useState<string>("Alle");
   const [filterCreator, setFilterCreator] = useState<string>("Alle");
@@ -1158,12 +1244,15 @@ function DashboardView({ playerName }: { playerName: string }) {
     })();
   }, [playerName]);
 
+  // ---- Daten-Indizes ----
   const gamesById = new Map((allGames || []).map((g) => [g.id as string, g]));
 
+  // ---- Optionen für Filter ----
   const topicOptions = ["Alle", ...Array.from(new Set(allGames.map((g) => g.topic || "Ohne Thema")))];
   const difficultyOptions = ["Alle", "Einfach", "Mittel", "Schwer"];
   const creatorOptions = ["Alle", ...Array.from(new Set(allGames.map((g) => g.creator || "Unbekannt")))];
 
+  // ---- Helfer: Textsuche ----
   const norm = (s: string) => (s || "").toLowerCase();
   const matchesSearchGame = (g: Game) => {
     if (!search) return true;
@@ -1181,6 +1270,7 @@ function DashboardView({ playerName }: { playerName: string }) {
     );
   };
 
+  // ---- Gefilterte Spiele ----
   const filteredGames = allGames.filter((g) => {
     if (!matchesSearchGame(g)) return false;
     if (filterTopic !== "Alle" && (g.topic || "Ohne Thema") !== filterTopic) return false;
@@ -1190,6 +1280,7 @@ function DashboardView({ playerName }: { playerName: string }) {
     return true;
   });
 
+  // ---- Gefilterte Scores ----
   const filteredScores = allScores.filter((s) => {
     const g = gamesById.get(s.gameId);
     if (!g) return false;
@@ -1202,6 +1293,7 @@ function DashboardView({ playerName }: { playerName: string }) {
     return true;
   });
 
+  // ---- Kennzahlen (global) ----
   const totalGames = allGames.length;
   const totalPlays = allGames.reduce((sum, g) => sum + (g.plays || 0), 0);
   const avgRating =
@@ -1211,12 +1303,15 @@ function DashboardView({ playerName }: { playerName: string }) {
   const totalPlayers = new Set(allScores.map((s) => s.playerName)).size;
   const millionWins = allScores.filter((s) => s.completed).length;
 
+  // ---- Persönliche Kennzahlen ----
   const myTotalPlays = myScores.length;
   const myWins = myScores.filter((s) => s.completed).length;
   const myTotalEarnings = myScores.reduce((sum, s) => sum + (s.earnedMoney || 0), 0);
 
+  // ---- 4) Top 5 beliebteste Spiele (aus gefilterten Spielen) ----
   const topPopularGames = [...filteredGames].sort((a, b) => (b.plays || 0) - (a.plays || 0)).slice(0, 5);
 
+  // ---- 5) Top 3 Spieler pro Kategorie (aus gefilterten Scores) ----
   const scoresByTopic: Record<string, PlayerScore[]> = filteredScores.reduce((acc, s) => {
     const g = gamesById.get(s.gameId);
     const topic = g?.topic || "Ohne Thema";
@@ -1224,6 +1319,7 @@ function DashboardView({ playerName }: { playerName: string }) {
     return acc;
   }, {} as Record<string, PlayerScore[]>);
 
+  // bestes Ergebnis je Spieler innerhalb der Kategorie, dann Top3
   const top3ByTopic: Array<{ topic: string; players: Array<{ playerName: string; earnedMoney: number }> }> =
     Object.entries(scoresByTopic)
       .map(([topic, scores]) => {
@@ -1243,6 +1339,7 @@ function DashboardView({ playerName }: { playerName: string }) {
       })
       .sort((a, b) => a.topic.localeCompare(b.topic));
 
+  // ---- 6) Top 5 Themenbereiche (aus gefilterten Spielen) ----
   const topicCounts = filteredGames.reduce<Record<string, number>>((acc, g) => {
     const key = g.topic || "Ohne Thema";
     acc[key] = (acc[key] || 0) + 1;
@@ -1251,6 +1348,7 @@ function DashboardView({ playerName }: { playerName: string }) {
   const totalTopicGames = Object.values(topicCounts).reduce((a, b) => a + b, 0);
   const topTopics = Object.entries(topicCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
+  // ---- Leaderboard (mit Limit) ----
   const limitedLeaderboard = [...filteredScores]
     .sort((a, b) => (b.earnedMoney || 0) - (a.earnedMoney || 0))
     .slice(0, Math.max(1, Math.min(100, topLimit)));
@@ -1278,6 +1376,7 @@ function DashboardView({ playerName }: { playerName: string }) {
     <div className="text-white">
       <h2 className="text-4xl font-bold mb-8 text-center text-yellow-400">📊 Dashboard – {playerName}</h2>
 
+      {/* --- Filterleiste --- */}
       <div className="mb-8 bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-6 border border-white border-opacity-20">
         <SectionHeader icon="⚙️" label="Filter" />
         <div className="grid md:grid-cols-6 gap-4">
@@ -1367,6 +1466,7 @@ function DashboardView({ playerName }: { playerName: string }) {
         </div>
       </div>
 
+      {/* 1) Deine Statistiken */}
       <div className="mb-8">
         <SectionHeader icon="👤" label="Deine Statistiken" />
         <div className="grid md:grid-cols-3 gap-6">
@@ -1388,6 +1488,7 @@ function DashboardView({ playerName }: { playerName: string }) {
         </div>
       </div>
 
+      {/* 2) Gesamt-Statistiken */}
       <div className="mb-10">
         <SectionHeader icon="🌍" label="Gesamt-Statistiken" />
         <div className="grid md:grid-cols-5 gap-6">
@@ -1419,6 +1520,7 @@ function DashboardView({ playerName }: { playerName: string }) {
         </div>
       </div>
 
+      {/* 3) Top X global + eigene letzten Spiele (nebeneinander) */}
       <div className="grid md:grid-cols-2 gap-8 mb-10">
         <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-6 border border-white border-opacity-20">
           <SectionHeader icon="🏆" label={`Top ${topLimit} – Globale Bestenliste`} sub="gefiltert" className="mb-6" />
@@ -1498,6 +1600,7 @@ function DashboardView({ playerName }: { playerName: string }) {
         </div>
       </div>
 
+      {/* 4) Top 5 beliebteste Spiele */}
       <div className="mb-10 bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-6 border border-white border-opacity-20">
         <SectionHeader icon="🔥" label="Top 5 beliebteste Spiele" sub="gefiltert" className="mb-2" />
         {topPopularGames.length === 0 ? (
@@ -1522,6 +1625,7 @@ function DashboardView({ playerName }: { playerName: string }) {
         )}
       </div>
 
+      {/* 5) Top 3 Spieler pro Kategorie */}
       <div className="mb-10 bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-6 border border-white border-opacity-20">
         <SectionHeader icon="👑" label="Top 3 Spieler pro Kategorie" sub="gefiltert" className="mb-2" />
         {top3ByTopic.length === 0 ? (
@@ -1555,6 +1659,7 @@ function DashboardView({ playerName }: { playerName: string }) {
         )}
       </div>
 
+      {/* 6) Top 5 häufigste Themenbereiche */}
       <div className="mb-2 bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-6 border border-white border-opacity-20">
         <SectionHeader icon="📚" label="Top 5 häufigste Themenbereiche" sub="gefiltert" className="mb-2" />
         {topTopics.length === 0 ? (
